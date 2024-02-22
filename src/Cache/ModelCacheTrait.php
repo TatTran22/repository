@@ -1,85 +1,80 @@
 <?php
 
-namespace Darkness\Repository\Cache;
+namespace TatTran\Repository\Cache;
+
+use TatTran\Repository\Cache\CacheKey;
+use TatTran\Repository\Cache\FlushCacheObserver;
+use Illuminate\Database\Eloquent\Builder;
 
 trait ModelCacheTrait
 {
-    public $cacheTime = 200;
+    protected $defaultCacheTime = 200;
 
-    public function cacheTime()
+    public function cacheTime(): int
     {
-        return $this->cacheTime;
+        return $this->defaultCacheTime;
     }
 
-    protected static function boot()
+    protected static function bootModelCacheTrait(): void
     {
-        parent::boot();
-
-        static::observe(
-            \Darkness\Repository\Cache\FlushCacheObserver::class
-        );
+        static::observe(FlushCacheObserver::class);
     }
 
-    public static function getName()
+    public static function getName(): string
     {
-        preg_match('@\\\\([\w]+)$@', get_called_class(), $matches);
-        return $matches[1];
+        return class_basename(static::class);
     }
 
     /**
-     * all cache keys
+     * Get all cache keys for the given type.
      *
-     * @param [type] $type
-     * @return void
+     * @param string $type
+     * @return array
      */
-    public function listCacheKeys($type)
+    public function listCacheKeys(string $type): array
     {
         return array_unique(array_merge($this->defaultCacheKeys($type), $this->customCacheKeys($type)));
     }
 
     /**
-     * default cache keys
+     * Get the default cache keys for the given type.
      *
-     * @param [type] $type
-     * @return void
+     * @param string $type
+     * @return array
      */
-    public function defaultCacheKeys($type)
+    public function defaultCacheKeys(string $type): array
     {
-        switch ($type) {
-            case 'detail':
-                return [
-                    CacheKey::generate(env('APP_NAME'), $this->getName() . '.getById', ['id' => $this->id]),
-                    CacheKey::generate(env('APP_NAME'), $this->getName() . '.getByIdInTrash', ['id' => $this->id])
-                ];
-            case 'list':
-                return [
-                    'lists.' . $this->getName()
-                ];
-            default:
-                return [];
-        }
+        return match ($type) {
+            'detail' => [
+                CacheKey::generate(env('APP_NAME'), static::class . '.getById', ['id' => $this->id]),
+                CacheKey::generate(env('APP_NAME'), static::class . '.getByIdInTrash', ['id' => $this->id])
+            ],
+            'list' => ['lists.' . static::class],
+            default => [],
+        };
     }
 
     /**
-     * custom cache keys
+     * Get the custom cache keys for the given type.
      *
-     * @param [type] $type
-     * @return void
+     * @param string $type
+     * @return array
      */
-    public function customCacheKeys($type)
+    public function customCacheKeys(string $type): array
     {
         return [];
     }
 
-    protected function newBaseQueryBuilder()
+    /**
+     * Get a new query builder instance with cache support.
+     *
+     * @return QueryBuilderWithCache
+     */
+    protected function newBaseQueryBuilder(): QueryBuilderWithCache
     {
         $connection = $this->getConnection();
-        $queryBuilder =
-            new QueryBuilderWithCache(
-                $connection,
-                $connection->getQueryGrammar(),
-                $connection->getPostProcessor()
-            );
-        return $queryBuilder->cacheFor($this->cacheTime())->withName($this->getName());
+        return (new QueryBuilderWithCache($connection, $connection->getQueryGrammar(), $connection->getPostProcessor()))
+            ->cacheFor($this->cacheTime())
+            ->withName(static::class);
     }
 }

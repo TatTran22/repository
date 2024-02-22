@@ -1,8 +1,10 @@
 <?php
 
-namespace Darkness\Repository\Middleware;
+namespace TatTran\Repository\Middleware;
 
 use Closure;
+use Illuminate\Http\Request;
+use TatTran\Repository\Cache\FlushCache;
 
 class TagForRequestMiddleware
 {
@@ -13,11 +15,11 @@ class TagForRequestMiddleware
      * @param  \Closure  $next
      * @return mixed
      */
-    public function handle($request, Closure $next)
+    public function handle(Request $request, Closure $next)
     {
         $request->tag = uniqid('request_') . uniqid('-');
         $response = $next($request);
-        \Darkness\Repository\Cache\FlushCache::request($request);
+        FlushCache::request($request);
         return $response;
     }
 }

@@ -1,84 +1,99 @@
 <?php
-namespace Darkness\Repository;
 
-use Intervention\Image\Facades\Image;
+namespace TatTran\Repository;
+
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Storage;
+use Intervention\Image\Facades\Image as ImageFacade;
 
 trait UploadTrait
 {
     /**
-     * upload image
-     * @param  mixed $file
+     * Upload an image.
+     *
+     * @param array $data
      * @return array
      */
-    public function upload(array $data)
+    public function upload(array $data): array
     {
-        $file          = $data['file'];
-        $width         = $data['width'] ?? 0;
-        $height        = $data['height'] ?? 0;
+        $file = $data['file'];
+        $width = $data['width'] ?? 0;
+        $height = $data['height'] ?? 0;
 
         $imageName = $this->generateNewFileName($file);
 
         try {
             if ($file->getClientOriginalExtension() == 'svg') {
                 $file->move(storage_path($this->model->uploadPath), $imageName);
-                return $this->uploadSuccess($imageName);
+            } else {
+                $image = ImageFacade::make($file->getRealPath());
+
+                if ($width && $height) {
+                    $image->fit($width, $height);
+                }
+
+                $image->save($this->getUploadImagePath($imageName));
             }
 
-            if ($width && $height) {
-                Image::make($file->getRealPath())->fit($width, $height)->save($this->getUploadImagePath($imageName));
-            } else {
-                Image::make($file->getRealPath())->save($this->getUploadImagePath($imageName));
-            }
             return $this->uploadSuccess($imageName);
-        } catch (\Exception $e) {
+        } catch (\Exception | \Throwable $e) {
             return $this->uploadFail($e);
-        } catch (\Throwable $t) {
-            return $this->uploadFail($t);
         }
     }
 
-    public function generateNewFileName($file)
+    /**
+     * Generate a new file name.
+     *
+     * @param mixed $file
+     * @return string
+     */
+    public function generateNewFileName($file): string
     {
-        $strSecret   = '!@#$%^&*()_+QBGFTNKU' . time() . rand(111111, 999999);
+        $strSecret = '!@#$%^&*()_+QBGFTNKU' . time() . rand(111111, 999999);
         $filenameMd5 = md5($file . $strSecret);
         return date('Y_m_d') . '_' . $filenameMd5 . '.' . $file->getClientOriginalExtension();
     }
 
     /**
-     * get image path
-     * @param  String $img
-     * @return String
-     */
-    public function getImagePath($img)
-    {
-        return app('url')->asset($this->model->imgPath . '/' . $img);
-    }
-
-    /**
-     * get path upload image
+     * Get the image path.
+     *
      * @param string $img
      * @return string
      */
-    public function getUploadImagePath($img)
+    public function getImagePath($img): string
     {
-        if (!File::isDirectory(storage_path($this->model->uploadPath))) {
-            File::makeDirectory(storage_path($this->model->uploadPath), 0777, true, true);
-        }
-        return storage_path($this->model->uploadPath . '/' . $img);
+        return asset($this->model->imgPath . '/' . $img);
     }
 
     /**
-     * upload success response
-     * @param  mixed $data
+     * Get the upload image path.
+     *
+     * @param string $img
+     * @return string
+     */
+    public function getUploadImagePath($img): string
+    {
+        $uploadPath = storage_path($this->model->uploadPath);
+
+        if (!File::isDirectory($uploadPath)) {
+            File::makeDirectory($uploadPath, 0777, true, true);
+        }
+
+        return $uploadPath . '/' . $img;
+    }
+
+    /**
+     * Upload success response.
+     *
+     * @param string $name
      * @return array
      */
-    protected function uploadSuccess($name)
+    protected function uploadSuccess($name): array
     {
         return [
-            'code'    => 1,
+            'code' => 1,
             'message' => 'success',
-            'data'    => [
+            'data' => [
                 'name' => $name,
                 'path' => $this->getImagePath($name)
             ]
@@ -86,25 +101,27 @@ trait UploadTrait
     }
 
     /**
-    * upload fail response
-    * @param  mixed $data
-    * @return array
-    */
-    protected function uploadFail($e)
+     * Upload fail response.
+     *
+     * @param \Exception|\Throwable $e
+     * @return array
+     */
+    protected function uploadFail($e): array
     {
         return [
-            'code'    => 0,
+            'code' => 0,
             'message' => 'fail',
-            'data'    => $e->getMessage()
+            'data' => $e->getMessage()
         ];
     }
 
     /**
-     * [removeImage description]
-     * @param  [type] $image [description]
-     * @return [type]        [description]
+     * Remove an image.
+     *
+     * @param string $image
+     * @return void
      */
-    public function removeImage($image)
+    public function removeImage($image): void
     {
         @unlink($this->getUploadImagePath($image));
     }

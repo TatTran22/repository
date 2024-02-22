@@ -1,27 +1,28 @@
 {
-    "name": "leekhang/repository",
-    "description": "Repository Pattern",
+    "name": "tattran22/repository",
+    "version": "2.0.0",
+    "description": "The TatTran Repository is a Laravel package designed to supercharge your app's speed by caching database queries and model operations. This means your app can retrieve data instantly, leading to a smoother user experience.\n\n",
     "authors": [
         {
-            "name": "Lê Bảo Khang",
-            "email": "lekhang2512@gmail.com"
+            "name": "Tất Trần",
+            "email": "tattran.dev@gmail.com"
         }
     ],
     "minimum-stability": "dev",
     "require": {
-        "illuminate/database": "7.*",
-        "illuminate/support": "7.*",
+        "php": "^8.2",
+        "laravel/framework": "^v9.0.2 | ^v10.0.1",
         "intervention/image": "^2.4"
     },
     "autoload": {
         "psr-4": {
-            "Darkness\\Repository\\": "src/"
+            "TatTran\\Repository\\": "src/"
         }
     },
     "extra": {
         "laravel": {
             "providers": [
-                "Darkness\\Repository\\RepositoryServiceProvider"
+                "TatTran\\Repository\\RepositoryServiceProvider"
             ]
         }
     }

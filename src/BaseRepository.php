@@ -1,36 +1,65 @@
 <?php
 
-namespace Darkness\Repository;
+namespace TatTran\Repository;
 
+use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Arr;
 use Illuminate\Http\Request;
-use Darkness\Repository\Cache\QueryCacheTrait;
+use Illuminate\Support\Facades\Cache;
+use TatTran\Repository\Cache\QueryCacheTrait;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Str;
 
 abstract class BaseRepository implements BaseRepositoryInterface
 {
     use QueryCacheTrait;
+
     /**
-     * Eloquent model
-     * @var \Illuminate\Database\Eloquent\Model
+     * The Eloquent model instance.
+     *
+     * @var Model
      */
     protected $model;
+
+    /**
+     * The ReflectionClass instance for the model.
+     *
+     * @var \ReflectionClass|null
+     */
     private $reflection;
 
-    protected function getReflection()
+    /**
+     * Get the ReflectionClass instance for the model.
+     *
+     * @return \ReflectionClass
+     */
+    protected function getReflection(): \ReflectionClass
     {
         if ($this->reflection) {
             return $this->reflection;
         }
+
         $this->reflection = new \ReflectionClass($this->getModel());
         return $this->reflection;
     }
 
+    /**
+     * Get the model instance.
+     *
+     * @return Model
+     */
     protected function getModel()
     {
         return $this->model;
     }
 
+    /**
+     * Get an instance of the model by ID or return the object if it's already an instance.
+     *
+     * @param mixed $object
+     * @return Model
+     */
     public function getInstance($object)
     {
         if (is_a($object, get_class($this->getModel()))) {
@@ -41,96 +70,116 @@ abstract class BaseRepository implements BaseRepositoryInterface
     }
 
     /**
-     * Lấy tất cả bản ghi có phân trang
-     * @author KingDarkness <lekhang2512@gmail.com>
+     * Get paginated records by query parameters.
+     *
      * @param array $params
-     * @param integer $size Số bản ghi mặc định 25
-     * @throws \ReflectionException
-     * @return Illuminate\Pagination\Paginator
+     * @param int $size
+     * @return LengthAwarePaginator
      */
-    public function getByQuery($params = [], $size = 25)
+    public function getByQuery(array $params = [], int $size = 25): LengthAwarePaginator
     {
+        // Extract sorting parameter
         $sort = Arr::get($params, 'sort', 'created_at:-1');
-
         $params['sort'] = $sort;
-        $lModel = $this->getModel();
+
+        // Apply filters if any
         $query = Arr::except($params, ['page', 'limit']);
-        if (count($query)) {
-            $lModel = $this->applyFilterScope($lModel, $query);
+        if (!empty($query)) {
+            $this->getModel()->where($query);
         }
 
-        switch ($size) {
-            case -1:
-                $callback = function ($query, $size) {
-                    return $query->get();
-                };
-                break;
-            case 0:
-                $callback = function ($query, $size) {
-                    return $query->first();
-                };
-                break;
-            default:
-                $callback = function ($query, $size) {
-                    return $query->paginate($size);
-                };
-                break;
-        }
-        $records =  $this->callWithCache(
+        // Determine the pagination callback based on size
+        $callback = function ($query, $size) {
+            return $query->paginate($size);
+        };
+
+        // Execute query with caching
+        return $this->callWithCache(
             $callback,
-            [$lModel, $size],
+            [$this->getModel(), $size],
             $this->getCacheKey(env('APP_NAME'), $this->getModel()->getName() . '.getByQuery', Arr::dot($params)),
             $this->getModel()->defaultCacheKeys('list')
         );
-        return $this->lazyLoadInclude($records);
-    }
-
-    protected function applyFilterScope($lModel, array $params)
-    {
-        foreach ($params as $funcName => $funcParams) {
-            $funcName = \Illuminate\Support\Str::studly($funcName);
-            if ($this->getReflection()->hasMethod('scope' . $funcName)) {
-                $funcName = lcfirst($funcName);
-                $lModel = $lModel->$funcName($funcParams);
-            }
-        }
-        return $lModel;
-    }
-
-    protected function getIncludes()
-    {
-        $query = app()->make(Request::class)->query();
-        $includes = Arr::get($query, 'include', []);
-        if (!is_array($includes)) {
-            $includes = array_map('trim', explode(',', $includes));
-        }
-        return $includes;
-    }
-
-    protected function lazyLoadInclude($objects)
-    {
-        if ($this->getReflection()->hasProperty('mapLazyLoadInclude')) {
-            $includes = $this->getIncludes();
-            $with = call_user_func($this->getReflection()->name . '::lazyloadInclude', $includes);
-            if (get_class($objects) == LengthAwarePaginator::class) {
-                return $objects->setCollection($objects->load($with));
-            }
-            return $objects->load($with);
-        }
-        return $objects;
     }
 
     /**
-     * Lấy thông tin 1 bản ghi xác định bởi ID
-     * @author KingDarkness <lekhang2512@gmail.com>
+     * Apply filter scope to the query.
      *
-     * @param  integer $id ID bản ghi
-     * @return Eloquent
+     * @param Model $model
+     * @param array $params
+     * @return Model
      */
-    public function getById($id, $key = 'id')
+    protected function applyFilterScope(Model $model, array $params)
+    {
+        foreach ($params as $funcName => $funcParams) {
+            $funcName = Str::studly($funcName);
+            $scopeMethod = 'scope' . $funcName;
+
+            if ($this->getReflection()->hasMethod($scopeMethod)) {
+                $model->$scopeMethod($funcParams);
+            }
+        }
+
+        return $model;
+    }
+
+    /**
+     * Get includes from the request query.
+     *
+     * @return array
+     */
+    protected function getIncludes(): array
+    {
+        $query = request()->query();
+        $includes = Arr::get($query, 'include', []);
+
+        if (!is_array($includes)) {
+            $includes = array_map('trim', explode(',', $includes));
+        }
+
+        return $includes;
+    }
+
+    /**
+     * Lazy load includes for the objects.
+     *
+     * @param mixed $objects
+     * @return mixed
+     */
+    protected function lazyLoadInclude($objects)
+    {
+        if ($this->hasLazyLoadInclude()) {
+            $includes = $this->getIncludes();
+            $with = $this->getModel()::lazyloadInclude($includes);
+
+            if ($objects instanceof LengthAwarePaginator) {
+                return $objects->setCollection($objects->load($with));
+            }
+
+            return $objects->load($with);
+        }
+
+        return $objects;
+    }
+
+    protected function hasLazyLoadInclude(): bool
+    {
+        return property_exists($this->getModel(), 'mapLazyLoadInclude');
+    }
+
+
+
+    /**
+     * Get a record by its ID.
+     *
+     * @param mixed $id
+     * @param string $key
+     * @return Model
+     */
+    public function getById($id, string $key = 'id')
     {
         if ($key == 'id' && is_numeric($id)) {
-            $id = (int) $id;
+            $id = (int)$id;
         }
 
         $callback = function ($id, $static, $key) {
@@ -139,7 +188,8 @@ abstract class BaseRepository implements BaseRepositoryInterface
             }
             return $static->getModel()->findOrFail($id);
         };
-        $record =  $this->callWithCache(
+
+        $record = $this->callWithCache(
             $callback,
             [$id, $this, $key],
             $this->getCacheKey(env('APP_NAME'), $this->getModel()->getName() . '.getById', [$key => $id])
@@ -149,37 +199,39 @@ abstract class BaseRepository implements BaseRepositoryInterface
     }
 
     /**
-     * Lấy thông tin 1 bản ghi đã bị xóa softDelete được xác định bởi ID
-     * @author KingDarkness <lekhang2512@gmail.com>
+     * Get a soft-deleted record by its ID.
      *
-     * @param  integer $id ID bản ghi
-     * @return Eloquent
+     * @param mixed $id
+     * @param string $key
+     * @return Model
      */
-    public function getByIdInTrash($id, $key = 'id')
+    public function getByIdInTrash($id, string $key = 'id')
     {
         if (is_numeric($id)) {
-            $id = (int) $id;
+            $id = (int)$id;
         }
+
         $callback = function ($id, $static, $key) {
             if ($key != $static->getModel()->getKeyName()) {
                 return $static->getModel()->withTrashed()->where($key, $id)->firstOrFail();
             }
             return $static->getModel()->withTrashed()->findOrFail($id);
         };
+
         $record = $this->callWithCache(
             $callback,
             [$id, $this, $key],
             $this->getCacheKey(env('APP_NAME'), $this->getModel()->getName() . '.getByIdInTrash', [$key => $id])
         );
+
         return $this->lazyLoadInclude($record);
     }
 
     /**
-     * Lưu thông tin 1 bản ghi mới
-     * @author KingDarkness <lekhang2512@gmail.com>
+     * Store a new record.
      *
-     * @param  array $data
-     * @return Eloquent
+     * @param array $data
+     * @return Model
      */
     public function store(array $data)
     {
@@ -187,40 +239,42 @@ abstract class BaseRepository implements BaseRepositoryInterface
     }
 
     /**
-     * Lưu thông tin nhiều bản ghi
-     * @author KingDarkness <lekhang2512@gmail.com>
-     * @param  [type]     $datas [description]
-     * @return Eloquent [type]            [description]
+     * Store multiple records.
+     *
+     * @param array $data
+     * @return Model
      */
-    public function storeArray(array $datas)
+    public function storeArray(array $data)
     {
-        if (count($datas) && is_array(reset($datas))) {
+        if (count($data) && is_array(reset($data))) {
             $fillable = $this->getModel()->getFillable();
             $now = \Carbon\Carbon::now();
 
-            foreach ($datas as $key => $data) {
-                $datas[$key] = Arr::only($data, $fillable);
+            foreach ($data as $key => $data) {
+                $data[$key] = Arr::only($data, $fillable);
                 if ($this->getModel()->usesTimestamps()) {
-                    $datas[$key]['created_at'] = $now;
-                    $datas[$key]['updated_at'] = $now;
+                    $data[$key]['created_at'] = $now;
+                    $data[$key]['updated_at'] = $now;
                 }
             }
-            $result = $this->getModel()->insert($datas);
+            $result = $this->getModel()->insert($data);
             if ($result) {
-                \Cache::tags($this->getModel()->listCacheKeys('list'))->flush();
+                Cache::tags($this->getModel()->listCacheKeys('list'))->flush();
             }
             return $result;
         }
 
-        return $this->store($datas);
+        return $this->store($data);
     }
 
     /**
-     * Cập nhật thông tin 1 bản ghi theo ID
-     * @author KingDarkness <lekhang2512@gmail.com>
+     * Update a record by its ID.
      *
-     * @param  integer $id ID bản ghi
-     * @return Eloquent
+     * @param mixed $id
+     * @param array $data
+     * @param array $excepts
+     * @param array $only
+     * @return Model
      */
     public function update($id, array $data, array $excepts = [], array $only = [])
     {
@@ -235,24 +289,21 @@ abstract class BaseRepository implements BaseRepositoryInterface
     }
 
     /**
-     * Xóa 1 bản ghi. Nếu model xác định 1 SoftDeletes
-     * thì method này chỉ đưa bản ghi vào trash. Dùng method destroy
-     * để xóa hoàn toàn bản ghi.
-     * @author KingDarkness <lekhang2512@gmail.com>
+     * Delete a record by its ID.
      *
-     * @param  integer $id ID bản ghi
-     * @return bool|null
+     * @param mixed $id
+     * @return bool
      */
-    public function delete($id)
+    public function delete($id): bool
     {
         $record = $this->getInstance($id);
         return $record->delete();
     }
 
     /**
-     * Xóa hoàn toàn một bản ghi
-     * @author KingDarkness <lekhang2512@gmail.com>
-     * @param  integer $id ID bản ghi
+     * Permanently delete a record by its ID.
+     *
+     * @param mixed $id
      * @return bool|null
      */
     public function destroy($id)
@@ -263,9 +314,9 @@ abstract class BaseRepository implements BaseRepositoryInterface
     }
 
     /**
-     * Khôi phục 1 bản ghi SoftDeletes đã xóa
-     * @author KingDarkness <lekhang2512@gmail.com>
-     * @param  integer $id ID bản ghi
+     * Restore a soft-deleted record by its ID.
+     *
+     * @param mixed $id
      * @return bool|null
      */
     public function restore($id)

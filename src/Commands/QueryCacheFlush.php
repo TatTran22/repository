@@ -1,8 +1,9 @@
 <?php
 
-namespace Darkness\Repository\Commands;
+namespace TatTran\Repository\Commands;
 
 use Illuminate\Console\Command;
+use TatTran\Repository\Cache\FlushCache;
 
 class QueryCacheFlush extends Command
 {
@@ -20,8 +21,13 @@ class QueryCacheFlush extends Command
      */
     protected $description = 'Clear all query cache';
 
+    /**
+     * Execute the console command.
+     *
+     * @return mixed
+     */
     public function handle()
     {
-        \Darkness\Repository\Cache\FlushCache::all();
+        FlushCache::all();
     }
 }

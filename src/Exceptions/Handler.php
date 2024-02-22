@@ -1,18 +1,19 @@
 <?php
 
-namespace Darkness\Repository\Exceptions;
+namespace TatTran\Repository\Exceptions;
 
 use Exception;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Auth\Access\AuthorizationException;
-use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Laravel\Lumen\Exceptions\Handler as ExceptionHandler;
 use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
-use Illuminate\Http\Exception\HttpResponseException;
-use Illuminate\Http\Response;
+use Laravel\Lumen\Exceptions\Handler as ExceptionHandler;
+use TatTran\Repository\Cache\FlushCache;
 
 class Handler extends ExceptionHandler
 {
@@ -52,45 +53,45 @@ class Handler extends ExceptionHandler
     public function render($request, Exception $e)
     {
         try {
-            \Darkness\Repository\Cache\FlushCache::request(app()->make('request'));
+            FlushCache::request($request);
         } catch (\Throwable $th) {
-            //throw $th;
+            // Handle any exceptions that occur during cache flush gracefully
         }
+
         if (env('APP_DEBUG') && !$request->ajax()) {
             return parent::render($request, $e);
         }
 
-        $success = false;
-        $response = null;
         $status = Response::HTTP_INTERNAL_SERVER_ERROR;
+        $message = 'Internal Server Error';
+
         if ($e instanceof HttpResponseException) {
             $status = Response::HTTP_INTERNAL_SERVER_ERROR;
             $response = $e->getResponse();
         } elseif ($e instanceof MethodNotAllowedHttpException) {
             $status = Response::HTTP_METHOD_NOT_ALLOWED;
-            $e = new MethodNotAllowedHttpException([], 'HTTP_METHOD_NOT_ALLOWED', $e);
+            $message = 'Method Not Allowed';
         } elseif ($e instanceof NotFoundHttpException) {
             $status = Response::HTTP_NOT_FOUND;
-            $e = new NotFoundHttpException('HTTP_NOT_FOUND', $e);
+            $message = 'Not Found';
         } elseif ($e instanceof AuthorizationException) {
             $status = Response::HTTP_FORBIDDEN;
-            $e = new AuthorizationException('HTTP_FORBIDDEN', $status);
-        } elseif ($e instanceof \Dotenv\Exception\ValidationException && $e->getResponse()) {
+            $message = 'Forbidden';
+        } elseif ($e instanceof ValidationException && $e->getResponse()) {
             $status = Response::HTTP_BAD_REQUEST;
-            $e = new \Dotenv\Exception\ValidationException('HTTP_BAD_REQUEST', $status, $e);
+            $message = 'Validation Failed';
             $response = $e->getResponse();
         } elseif ($e instanceof AuthenticationException) {
             $status = Response::HTTP_UNAUTHORIZED;
+            $message = 'Unauthorized';
             $response = $e->getMessage();
-        } elseif ($e) {
-            return parent::render($request, $e);
-            // $e = new HttpException($status, 'HTTP_INTERNAL_SERVER_ERROR');
         }
+
         return response()->json([
-            'success' => $success,
+            'success' => false,
             'status' => $status,
             'code' => $status,
-            'message' => $e->getMessage()
+            'message' => $message
         ], $status, [
             'Access-Control-Allow-Origin'      => '*',
             'Access-Control-Allow-Methods'     => '*',

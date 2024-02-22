@@ -1,6 +1,6 @@
 <?php
 
-namespace Darkness\Repository;
+namespace TatTran\Repository;
 
 interface EntityInterface
 {

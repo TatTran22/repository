@@ -1,18 +1,18 @@
 <?php
 
-namespace Darkness\Repository\Cache;
+namespace TatTran\Repository\Cache;
 
-use Cache;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Query\Grammars\Grammar;
 use Illuminate\Database\Query\Processors\Processor;
 use Illuminate\Database\Query\Builder as QueryBuilder;
+use Illuminate\Support\Facades\Cache;
 
 class QueryBuilderWithCache extends QueryBuilder
 {
     protected $cacheTime;
     protected $modelName;
-    public $defaultCacheTags = ['QueryCache'];
+    protected $defaultCacheTags = ['QueryCache'];
 
     public function __construct(
         ConnectionInterface $connection,
@@ -22,13 +22,13 @@ class QueryBuilderWithCache extends QueryBuilder
         parent::__construct($connection, $grammar, $processor);
     }
 
-    public function cacheFor($cacheTime)
+    public function cacheFor(int $cacheTime)
     {
         $this->cacheTime = $cacheTime;
         return $this;
     }
 
-    public function withName($modelName)
+    public function withName(string $modelName)
     {
         $this->modelName = $modelName;
         return $this;
@@ -50,11 +50,11 @@ class QueryBuilderWithCache extends QueryBuilder
 
     protected function runSelect()
     {
-        if ($this->cacheTime && app()->make('request')->tag) {
+        if ($this->cacheTime && app('request')->tag) {
             $tags = array_unique(array_merge(
                 [
-                    app()->make('request')->tag,
-                    $this->modelName . '_' . app()->make('request')->tag,
+                    app('request')->tag,
+                    $this->modelName . '_' . app('request')->tag,
                     $this->cacheKey()
                 ],
                 $this->defaultCacheTags
@@ -62,7 +62,7 @@ class QueryBuilderWithCache extends QueryBuilder
 
             $cacheTime = $this->getCacheTime();
             $this->cacheTime = null;
-            return \Cache::tags($tags)->remember($this->cacheKey(), $cacheTime, function () {
+            return Cache::tags($tags)->remember($this->cacheKey(), $cacheTime, function () {
                 return parent::runSelect();
             });
         }
