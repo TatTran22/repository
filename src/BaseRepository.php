@@ -2,9 +2,7 @@
 
 namespace TatTran\Repository;
 
-use Illuminate\Pagination\Paginator;
 use Illuminate\Support\Arr;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use TatTran\Repository\Cache\QueryCacheTrait;
 use Illuminate\Database\Eloquent\Model;
@@ -76,31 +74,38 @@ abstract class BaseRepository implements BaseRepositoryInterface
      * @param int $size
      * @return LengthAwarePaginator
      */
-    public function getByQuery(array $params = [], int $size = 25): LengthAwarePaginator
+    public function getByQuery($params = [], $size = 25)
     {
-        // Extract sorting parameter
         $sort = Arr::get($params, 'sort', 'created_at:-1');
         $params['sort'] = $sort;
-
-        // Apply filters if any
+        $model = $this->getModel();
         $query = Arr::except($params, ['page', 'limit']);
-        if (!empty($query)) {
-            $this->getModel()->where($query);
+
+        if (count($query)) {
+            $model = $this->applyFilterScope($model, $query);
         }
 
-        // Determine the pagination callback based on size
         $callback = function ($query, $size) {
-            return $query->paginate($size);
+            switch ($size) {
+                case -1:
+                    return $query->get();
+                case 0:
+                    return $query->first();
+                default:
+                    return $query->paginate($size);
+            }
         };
 
-        // Execute query with caching
-        return $this->callWithCache(
+        $records = $this->callWithCache(
             $callback,
-            [$this->getModel(), $size],
-            $this->getCacheKey(env('APP_NAME'), $this->getModel()->getName() . '.getByQuery', Arr::dot($params)),
-            $this->getModel()->defaultCacheKeys('list')
+            [$model, $size],
+            $this->getCacheKey(env('APP_NAME'), $model->getName() . '.getByQuery', Arr::dot($params)),
+            $model->defaultCacheKeys('list')
         );
+
+        return $this->lazyLoadInclude($records);
     }
+
 
     /**
      * Apply filter scope to the query.
@@ -166,7 +171,6 @@ abstract class BaseRepository implements BaseRepositoryInterface
     {
         return property_exists($this->getModel(), 'mapLazyLoadInclude');
     }
-
 
 
     /**

@@ -1,6 +1,6 @@
 {
     "name": "tattran22/repository",
-    "version": "2.0.3",
+    "version": "2.0.4",
     "description": "The TatTran Repository is a Laravel package designed to supercharge your app's speed by caching database queries and model operations. This means your app can retrieve data instantly, leading to a smoother user experience.\n\n",
     "authors": [
         {
