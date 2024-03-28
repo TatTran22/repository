@@ -24,8 +24,8 @@ Installation is a breeze:
 
 **Documentation and Support:**
 
-For detailed usage instructions, configuration options, and contribution guidelines, head over to the project's GitHub repository: [link to repository].
+For detailed usage instructions, configuration options, and contribution guidelines, head over to the project's GitHub repository: [TatTran Repository](https://github.com/TatTran22/repository).
 
 **License:**
 
-The TatTran Repository is open-source software released under the MIT license.
+This package is free to use under the MIT license and developed by [Tat Tran](https://tattran.com)
