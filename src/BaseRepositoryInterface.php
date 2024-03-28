@@ -61,7 +61,7 @@ interface BaseRepositoryInterface
      * @param mixed $id
      * @return bool
      */
-    public function delete($id): bool;
+    public function delete($id);
 
     /**
      * Permanently delete a record by its ID.
